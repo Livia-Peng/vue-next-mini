@@ -1,3 +1,4 @@
+import { isArray } from '@vue/shared'
 import { createDep, Dep } from './dep'
 
 type KeyToDepMap = Map<any, Dep>
@@ -5,6 +6,12 @@ type KeyToDepMap = Map<any, Dep>
 // 收集所有依赖的 WeakMap 实例
 const targetMap = new WeakMap<any, KeyToDepMap>()
 
+/**
+ *
+ * @param target
+ * @param key
+ * @returns
+ */
 export function track(target: object, key: unknown) {
   if (!activeEffect) return
   // 尝试从 targetMap 中，根据 target 获取 map
@@ -24,12 +31,22 @@ export function track(target: object, key: unknown) {
   trackEffects(dep)
 }
 
+/**
+ *
+ * @param dep
+ */
 export function trackEffects(dep: Dep) {
   dep.add(activeEffect!)
 }
 
 // ============================================================
 
+/**
+ *
+ * @param target
+ * @param key
+ * @returns
+ */
 export function trigger(target: object, key?: unknown) {
   // 依据 target 获取存储的 map 实例
   const depsMap = targetMap.get(target)
@@ -44,12 +61,16 @@ export function trigger(target: object, key?: unknown) {
 // 依次触发 dep 中保存的依赖
 export function triggerEffects(dep: Dep) {
   // 把 dep 构建为一个数组
-  const effects = Array.isArray(dep) ? dep : [...dep]
+  const effects = isArray(dep) ? dep : [...dep]
   for (const effect of effects) {
     triggerEffect(effect)
   }
 }
 
+/**
+ *
+ * @param effect
+ */
 export function triggerEffect(effect: ReactiveEffect) {
   effect.run()
 }
