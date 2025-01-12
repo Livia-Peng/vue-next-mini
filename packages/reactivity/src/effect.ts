@@ -1,16 +1,18 @@
 import { isArray } from '@vue/shared'
 import { createDep, Dep } from './dep'
+import { ComputedRefImpl } from './computed'
 
 type KeyToDepMap = Map<any, Dep>
+
+export type EffectScheduler = (...args: any[]) => any
 
 // 收集所有依赖的 WeakMap 实例
 const targetMap = new WeakMap<any, KeyToDepMap>()
 
 /**
- *
- * @param target
- * @param key
- * @returns
+ * 用于收集依赖的方法
+ * @param target 被代理对象，作为 targetMap 的 key
+ * @param key 代理对象的 key，当依赖被触发时，需要根据该 key 获取
  */
 export function track(target: object, key: unknown) {
   if (!activeEffect) return
@@ -32,20 +34,20 @@ export function track(target: object, key: unknown) {
 }
 
 /**
- *
+ * 利用 dep 依次跟踪指定 key 的所有 effect
  * @param dep
  */
 export function trackEffects(dep: Dep) {
+  // activeEffect! 断言 activeEffect 不为 null
   dep.add(activeEffect!)
 }
 
 // ============================================================
 
 /**
- *
- * @param target
- * @param key
- * @returns
+ * 触发依赖的方法
+ * @param target 被代理对象，作为 targetMap 的 key
+ * @param key 代理对象的 key，当依赖被触发时，需要根据该 key 获取
  */
 export function trigger(target: object, key?: unknown) {
   // 依据 target 获取存储的 map 实例
@@ -62,17 +64,30 @@ export function trigger(target: object, key?: unknown) {
 export function triggerEffects(dep: Dep) {
   // 把 dep 构建为一个数组
   const effects = isArray(dep) ? dep : [...dep]
+  // for (const effect of effects) {
+  //   triggerEffect(effect)
+  // }
+
+  // 先触发所有的计算属性依赖，再触发所有的非计算属性依赖，以免触发死循环
   for (const effect of effects) {
-    triggerEffect(effect)
+    if (effect.computed) {
+      triggerEffect(effect)
+    }
+  }
+  for (const effect of effects) {
+    if (!effect.computed) {
+      triggerEffect(effect)
+    }
   }
 }
 
-/**
- *
- * @param effect
- */
+// 触发指定的依赖
 export function triggerEffect(effect: ReactiveEffect) {
-  effect.run()
+  if (effect.scheduler) {
+    effect.scheduler()
+  } else {
+    effect.run()
+  }
 }
 
 /**
@@ -84,7 +99,10 @@ export let activeEffect: ReactiveEffect | undefined
  * 响应性触发依赖时的执行类
  */
 export class ReactiveEffect<T = any> {
-  constructor(public fn: () => T) {}
+  // 存在该属性，则表示当前的 effect 为计算属性的 effect
+  computed?: ComputedRefImpl<T>
+
+  constructor(public fn: () => T, public scheduler: EffectScheduler | null = null) {}
 
   run() {
     // 为 activeEffect 赋值
